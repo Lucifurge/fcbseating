@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FCB Chapel Seating</title>
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #e0f7fa, #c8e6c9);
+  color: #333;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+nav {
+  width: 100%;
+  background: #1b5e20;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-wrap: wrap;
+}
+nav .logo img { height: 45px; width: auto; }
+.nav-links { display: flex; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.nav-links a, .nav-links select {
+  color: white;
+  text-decoration: none;
+  margin-left: 15px;
+  font-weight: bold;
+  background: transparent;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.nav-links a:hover { color: #ffd700; }
+
+h1 {
+  text-align: center;
+  color: #1b5e20;
+  font-weight: 900;
+  margin: 15px 0;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+  font-size: 2rem;
+}
+
+#grid {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 1400px;
+  width: 100%;
+  padding: 0 10px;
+  align-items: center;
+}
+
+.seat-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 24px;
+  width: 100%;
+  overflow-x: auto;
+  padding-left: 10px;
+}
+
+.seat {
+  padding: 18px 12px;
+  text-align: center;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: bold;
+  color: white;
+  background: #43a047;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  transition: box-shadow 0.2s ease;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.gold { background: linear-gradient(135deg, #ffd700, #ffb300); color: #333; }
+.taken { background: #9e9e9e !important; color: #fff; text-decoration: line-through; }
+.arrived-seat { background: purple !important; color: #fff !important; text-decoration: none; }
+.not-arrived-seat { background: red !important; color: #fff !important; text-decoration: none; }
+.spacer { width: 60px; }
+
+.status-menu {
+  position: absolute;
+  background: white;
+  border: 1px solid #ccc;
+  padding: 8px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 9999;
+  display: none;
+}
+
+.status-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  margin: 4px 0;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.status-arrived { background: purple; color: white; }
+.status-not { background: red; color: white; }
+
+@media(max-width: 480px){
+  .seat-row { gap: 10px; padding-left: 5px; }
+  .seat { font-size: 0.65rem; padding: 8px 5px; }
+}
+</style>
+</head>
+
+<body>
+
+<nav>
+  <div class="logo"><img src="febias.png" alt="Febias Logo" /></div>
+  <div class="nav-links">
+    <a href="index.html">Day 1</a>
+    <a href="day2.html">Day 2</a>
+    <select id="eventSelector">
+      <option value="christmas">Christmas for Christ</option>
+      <option value="newyear">New Year Celebration</option>
+      <option value="easter">Easter Sunday</option>
+    </select>
+  </div>
+</nav>
+
+<h1 id="eventTitle">Fcb Chapel Seating Day 2</h1>
+<div id="grid"></div>
+
+<div id="statusMenu" class="status-menu">
+  <button id="btnArrived" class="status-arrived">Arrived</button>
+  <button id="btnNotArrived" class="status-not">Not Arrived</button>
+</div>
+
+<script>
+const rows = 12;
+const API_URL = "https://script.google.com/macros/s/AKfycbzfr8d8MUmnZeekaK-KwnHBjaKPdi4RXh6hx1J8v379TYI--2H6he8c-E4i1LBBZh4vng/exec";
+let saved = {};
+let activeSeat = null;
+
+const statusMenu = document.getElementById("statusMenu");
+const btnArrived = document.getElementById("btnArrived");
+const btnNotArrived = document.getElementById("btnNotArrived");
+
+document.body.addEventListener("click", () => { statusMenu.style.display = "none"; });
+
+btnArrived.onclick = async () => {
+  if(!activeSeat) return;
+  const id = activeSeat.dataset.id;
+  saved[id].status = "Arrived";
+  await fetch(API_URL + "?seat=" + id + "&status=Arrived");
+  loadReservations();
+};
+
+btnNotArrived.onclick = async () => {
+  if(!activeSeat) return;
+  const id = activeSeat.dataset.id;
+  saved[id].status = "Not Arrived";
+  await fetch(API_URL + "?seat=" + id + "&status=Not Arrived");
+  loadReservations();
+};
+
+/* ---------- BUILD ALL ROWS ONCE (NO MORE RESETTING) --------- */
+function buildEmptyGrid() {
+  const grid = document.getElementById("grid");
+
+  for (let r = 0; r < rows; r++) {
+    const row = document.createElement("div");
+    row.className = "seat-row";
+
+    const rowLetter = String.fromCharCode(65 + r);
+    const seatsInRow = r < 6 ? 18 : 24;
+    const spacerInterval = r < 6 ? 6 : 4;
+
+    for (let n = 1; n <= seatsInRow; n++) {
+      const id = rowLetter + n;
+
+      const seat = document.createElement("div");
+      seat.className = "seat";
+      if (r < 6) seat.classList.add("gold");
+      seat.dataset.id = id;
+      seat.textContent = id;
+
+      seat.onclick = (e) => {
+        e.stopPropagation();
+        activeSeat = seat;
+
+        if (!saved[id] || !saved[id].name) {
+          const name = prompt("Enter name for seat " + id);
+          if (name) {
+            saved[id] = { name, status: "" };
+            fetch(API_URL + "?seat=" + id + "&name=" + encodeURIComponent(name));
+            loadReservations();
+          }
+        } else {
+          statusMenu.style.left = e.pageX + "px";
+          statusMenu.style.top = e.pageY + "px";
+          statusMenu.style.display = "block";
+        }
+      };
+
+      row.appendChild(seat);
+
+      if (n % spacerInterval === 0 && n !== seatsInRow) {
+        const sp = document.createElement("div");
+        sp.className = "spacer";
+        row.appendChild(sp);
+      }
+    }
+
+    grid.appendChild(row);
+  }
+}
+
+/* ----------- UPDATE SEATS WITHOUT REBUILDING ROWS ----------- */
+function updateSeats() {
+  document.querySelectorAll(".seat").forEach(div => {
+    const id = div.dataset.id;
+
+    // Preserve gold for rows A-F
+    const isGold = id[0] < "G";
+
+    div.className = "seat";
+    if (isGold) div.classList.add("gold");
+
+    if (saved[id] && saved[id].name) {
+      div.textContent = `${id} (${saved[id].name})`;
+      div.classList.add("taken");
+
+      if (saved[id].status === "Arrived") div.classList.add("arrived-seat");
+      if (saved[id].status === "Not Arrived") div.classList.add("not-arrived-seat");
+    } else {
+      div.textContent = id;
+    }
+  });
+}
+
+/* --------------------- LOAD RESERVATIONS --------------------- */
+async function loadReservations() {
+  try {
+    const res = await fetch(API_URL);
+    let data = await res.json();
+    if (!Array.isArray(data)) data = data.seats || [];
+
+    saved = {};
+    data.forEach(s => {
+      if (s.seat) {
+        saved[s.seat] = {
+          name: s.name || "",
+          status: s.status || ""
+        };
+      }
+    });
+
+    updateSeats();
+  } catch (err) {}
+}
+
+buildEmptyGrid();
+loadReservations();
+setInterval(loadReservations, 3000);
+</script>
+
+</body>
+</html>
